@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rosclaw-vision-mcp"
+version = "0.1.0"
+description = "ROSClaw MCP Server for Intel RealSense RGB-D Camera via ROS2 — Semantic-HAL vision layer"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+keywords = ["mcp", "robotics", "realsense", "ros2", "vision", "rgb-d", "semantic-hal"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
+dependencies = [
+    "mcp[fastmcp]>=1.0.0",
+    "Pillow>=10.0",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+detection = [
+    "ultralytics>=8.0",    # YOLO-World for get_object_3d_coordinates
+]
+ros2 = [
+    # rclpy is installed via ROS2 distribution, not pip
+    # Run: source /opt/ros/humble/setup.bash
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+rosclaw-vision-mcp = "vision_mcp_server:main"
+
+[project.urls]
+Homepage = "https://github.com/ros-claw/rosclaw-vision-mcp"
+Repository = "https://github.com/ros-claw/rosclaw-vision-mcp"
+Issues = "https://github.com/ros-claw/rosclaw-vision-mcp/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

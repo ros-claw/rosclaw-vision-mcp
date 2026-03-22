@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "rosclaw-vision": {
+      "command": "bash",
+      "args": [
+        "-c",
+        "source /opt/ros/humble/setup.bash && python src/vision_mcp_server.py"
+      ],
+      "transportType": "stdio",
+      "description": "Intel RealSense RGB-D Camera MCP Server (Semantic-HAL vision layer)"
+    }
+  }
+}
