@@ -83,20 +83,33 @@ ros2 launch realsense2_camera rs_launch.py align_depth.enable:=true
 
 ### 2. Run MCP Server
 
+**Option A: Stdio mode (default)** - For MCP Inspector, Claude Desktop
 ```bash
 source /opt/ros/humble/setup.bash
 python src/vision_mcp_server.py
 ```
 
+**Option B: SSE mode** - Persistent server for stateful connections
+```bash
+source /opt/ros/humble/setup.bash
+python src/vision_mcp_server.py --transport sse --port 8000
+```
+
+> **Why SSE mode?** Stdio mode spawns a new process for each request, losing connection state. SSE mode keeps the server running, maintaining ROS2 connections and camera state between calls.
+
 ### 3. Test with MCP Inspector
 
 ```bash
+# Stdio mode
 mcp dev src/vision_mcp_server.py
-# connect_vision → capture_scene_snapshot → view image
+
+# Or test SSE mode
+curl http://localhost:8000/sse
 ```
 
 ### Claude Desktop Configuration
 
+**Stdio mode (stateless):**
 ```json
 {
   "mcpServers": {
@@ -110,6 +123,45 @@ mcp dev src/vision_mcp_server.py
     }
   }
 }
+```
+
+**SSE mode (stateful, recommended for production):**
+```json
+{
+  "mcpServers": {
+    "rosclaw-vision": {
+      "url": "http://127.0.0.1:8000/sse"
+    }
+  }
+}
+```
+
+## Configuration
+
+### ROS2 Topic Names
+
+If your RealSense camera publishes to different topic names (e.g., with namespace):
+
+```bash
+# Via environment variables
+export ROSCLAW_VISION_COLOR_TOPIC=/camera/camera/color/image_raw
+export ROSCLAW_VISION_DEPTH_TOPIC=/camera/camera/aligned_depth_to_color/image_raw
+export ROSCLAW_VISION_INFO_TOPIC=/camera/camera/color/camera_info
+
+python src/vision_mcp_server.py
+```
+
+### SSE Server Options
+
+```bash
+# Via command line
+python src/vision_mcp_server.py --transport sse --host 0.0.0.0 --port 8080
+
+# Via environment variables
+export MCP_TRANSPORT=sse
+export MCP_HOST=0.0.0.0
+export MCP_PORT=8080
+python src/vision_mcp_server.py
 ```
 
 ## Available Tools

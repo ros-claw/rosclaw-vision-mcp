@@ -25,6 +25,7 @@ import asyncio
 import base64
 import io
 import json
+import os
 import struct
 import subprocess
 import threading
@@ -134,9 +135,9 @@ class VisionROS2Bridge(Node if _HAS_ROS2 else object):  # type: ignore
     """
 
     TOPICS = {
-        "color": "/camera/color/image_raw",
-        "depth": "/camera/aligned_depth_to_color/image_raw",
-        "info":  "/camera/color/camera_info",
+        "color": os.environ.get("ROSCLAW_VISION_COLOR_TOPIC", "/camera/color/image_raw"),
+        "depth": os.environ.get("ROSCLAW_VISION_DEPTH_TOPIC", "/camera/aligned_depth_to_color/image_raw"),
+        "info":  os.environ.get("ROSCLAW_VISION_INFO_TOPIC", "/camera/color/camera_info"),
     }
 
     # Configurable depth limits (meters)
@@ -866,4 +867,66 @@ async def get_connection_status() -> str:
 
 
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    import argparse
+    
+    parser = argparse.ArgumentParser(
+        description="ROSClaw Vision MCP Server - RealSense RGB-D Camera Bridge",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Environment Variables:
+  ROSCLAW_VISION_COLOR_TOPIC  - Color image topic (default: /camera/color/image_raw)
+  ROSCLAW_VISION_DEPTH_TOPIC  - Depth image topic (default: /camera/aligned_depth_to_color/image_raw)
+  ROSCLAW_VISION_INFO_TOPIC   - Camera info topic (default: /camera/color/camera_info)
+
+Examples:
+  # Stdio mode (default, for mcporter/Claude Desktop)
+  python3 vision_mcp_server.py
+  
+  # SSE mode - persistent server for stateful connections
+  python3 vision_mcp_server.py --transport sse --port 8000
+  
+  # With custom ROS2 topic namespace
+  ROSCLAW_VISION_COLOR_TOPIC=/camera/camera/color/image_raw python3 vision_mcp_server.py
+        """.strip()
+    )
+    
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "sse"],
+        default=os.environ.get("MCP_TRANSPORT", "stdio"),
+        help="Transport mode: stdio (default, stateless) or sse (persistent, stateful)"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("MCP_PORT", "8000")),
+        help="Port for SSE mode (default: 8000, env: MCP_PORT)"
+    )
+    parser.add_argument(
+        "--host",
+        default=os.environ.get("MCP_HOST", "127.0.0.1"),
+        help="Host for SSE mode (default: 127.0.0.1, env: MCP_HOST)"
+    )
+    
+    args = parser.parse_args()
+    
+    # Log topic configuration
+    print(f"ROS2 Topics configured:")
+    print(f"  Color: {VisionROS2Bridge.TOPICS['color']}")
+    print(f"  Depth: {VisionROS2Bridge.TOPICS['depth']}")
+    print(f"  Info:  {VisionROS2Bridge.TOPICS['info']}")
+    print()
+    
+    if args.transport == "sse":
+        print(f"🚀 Starting ROSClaw Vision MCP Server in SSE mode")
+        print(f"   URL: http://{args.host}:{args.port}/sse")
+        print(f"   This is a PERSISTENT server - state maintained between requests")
+        print(f"   Press Ctrl+C to stop\n")
+        
+        # Configure MCP settings for SSE
+        mcp.settings.host = args.host
+        mcp.settings.port = args.port
+        mcp.run(transport="sse")
+    else:
+        # Stdio mode - default for MCP inspectors and Claude Desktop
+        mcp.run(transport="stdio")
