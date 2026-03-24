@@ -70,11 +70,8 @@ class TopicDiscovery:
         """自动发现所有相机话题"""
         cameras = []
         
-        if not _HAS_ROS2:
-            return cameras
-        
         try:
-            # Use ros2 topic list
+            # Use ros2 topic list (不依赖 _HAS_ROS2，直接尝试)
             result = subprocess.run(
                 ["ros2", "topic", "list"],
                 capture_output=True,
@@ -82,30 +79,47 @@ class TopicDiscovery:
                 timeout=timeout
             )
             
+            if result.returncode != 0:
+                print(f"ros2 topic list failed: {result.stderr}")
+                return cameras
+            
             topics = result.stdout.strip().split("\n")
             
-            # Find color image topics
-            color_topics = [t for t in topics if "color/image_raw" in t or "image_raw" in t]
+            # Find color image topics (must end with /color/image_raw)
+            color_topics = []
+            for t in topics:
+                # Must be a color image topic, not depth
+                if t.endswith("/color/image_raw"):
+                    color_topics.append(t)
+            
+            # Remove duplicates and sort
+            color_topics = sorted(set(color_topics))
             
             for color_topic in color_topics:
-                # Derive depth and info topics
-                base = color_topic.replace("/color/image_raw", "")
+                # Extract base namespace (everything before /color/image_raw)
+                base = color_topic[:-len("/color/image_raw")]
                 
-                # Check for aligned depth
+                # Camera ID is the last part of the namespace
+                if base:
+                    camera_id = base.strip("/").replace("/", "_")
+                else:
+                    camera_id = "camera"
+                
+                # Derive depth and info topics
                 depth_topic = f"{base}/aligned_depth_to_color/image_raw"
                 if depth_topic not in topics:
                     # Try non-aligned depth
                     depth_topic = f"{base}/depth/image_rect_raw"
+                    if depth_topic not in topics:
+                        depth_topic = None
                 
                 info_topic = f"{base}/color/camera_info"
-                
-                camera_id = base.strip("/") or "camera"
                 
                 cameras.append({
                     "id": camera_id,
                     "color": color_topic,
-                    "depth": depth_topic if depth_topic in topics else None,
-                    "info": info_topic,
+                    "depth": depth_topic if depth_topic and depth_topic in topics else None,
+                    "info": info_topic if info_topic in topics else None,
                 })
                 
         except Exception as e:
@@ -153,9 +167,9 @@ class MultiCameraManager:
         
         if self._node:
             # Create subscriptions
-            color_topic = camera_config.get("color", f"/{camera_id}/color/image_raw")
-            depth_topic = camera_config.get("depth", f"/{camera_id}/aligned_depth_to_color/image_raw")
-            info_topic = camera_config.get("info", f"/{camera_id}/color/camera_info")
+            color_topic = camera_config.get("color") or f"/{camera_id}/color/image_raw"
+            depth_topic = camera_config.get("depth")  # Can be None
+            info_topic = camera_config.get("info") or f"/{camera_id}/color/camera_info"
             
             self._node.create_subscription(
                 Image, color_topic, 
