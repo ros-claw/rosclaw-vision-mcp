@@ -1,0 +1,30 @@
+[Unit]
+Description=ROSClaw Vision MCP Server - Enhanced Edition
+Documentation=https://github.com/ros-claw/rosclaw-vision-mcp
+After=network.target
+
+[Service]
+Type=simple
+User=%I
+Environment="ROS_DISTRO=humble"
+Environment="ROS_DOMAIN_ID=0"
+Environment="MCP_TRANSPORT=sse"
+Environment="MCP_HOST=0.0.0.0"
+Environment="MCP_PORT=8000"
+# Optional: Custom ROS2 topic names
+# Environment="ROSCLAW_VISION_COLOR_TOPIC=/camera/camera/color/image_raw"
+# Environment="ROSCLAW_VISION_DEPTH_TOPIC=/camera/camera/aligned_depth_to_color/image_raw"
+# Environment="ROSCLAW_VISION_INFO_TOPIC=/camera/camera/color/camera_info"
+
+WorkingDirectory=/home/%I/rosclaw-vision-mcp
+ExecStartPre=/bin/bash -c 'source /opt/ros/humble/setup.bash && ros2 topic list'
+ExecStart=/bin/bash -c 'source /opt/ros/humble/setup.bash && /usr/bin/python3 src/vision_mcp_enhanced.py --transport sse --host 0.0.0.0 --port 8000'
+
+Restart=always
+RestartSec=5
+
+# Resource limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

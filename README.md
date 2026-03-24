@@ -6,7 +6,7 @@ Part of the [ROSClaw](https://github.com/ros-claw) Embodied Intelligence Operati
 
 ## Overview
 
-This MCP server gives LLM agents **eyes** — the ability to see and understand their physical environment through an Intel RealSense depth camera. It implements the ROSClaw **Semantic-HAL** (语义硬件抽象层) pattern: the LLM never touches the raw 30Hz sensor stream, only on-demand semantic results.
+This MCP server gives LLM agents **eyes** - the ability to see and understand their physical environment through an Intel RealSense depth camera. It implements the ROSClaw **Semantic-HAL** (语义硬件抽象层) pattern: the LLM never touches the raw 30Hz sensor stream, only on-demand semantic results.
 
 ```
 RealSense Camera
@@ -72,39 +72,86 @@ uv pip install -e .
 uv pip install -e ".[detection]"
 ```
 
+## Enhanced Features (New!)
+
+- ✅ **Multi-Camera Support** — Connect and control multiple RealSense cameras simultaneously
+- ✅ **Auto Topic Discovery** — Automatically find and connect to available cameras
+- ✅ **YOLO Object Detection** — Optional AI-powered object detection with 3D localization
+- ✅ **Stereo Vision** — Capture synchronized images from dual cameras
+- ✅ **SSE Transport Mode** — Persistent server for stateful connections (fixes stdio state loss)
+- ✅ **Systemd Service** — Run as a system service with auto-restart
+- ✅ **Configurable Topics** — Support custom ROS2 topic namespaces
+
 ## Quick Start
 
-### 1. Start RealSense camera
+### 1. Start RealSense camera(s)
 
+**Single camera:**
 ```bash
 source /opt/ros/humble/setup.bash
 ros2 launch realsense2_camera rs_launch.py align_depth.enable:=true
 ```
 
-### 2. Run MCP Server
-
-**Option A: Stdio mode (default)** - For MCP Inspector, Claude Desktop
+**Multiple cameras:**
 ```bash
-source /opt/ros/humble/setup.bash
-python src/vision_mcp_server.py
+./scripts/launch-multi-camera.sh
 ```
 
-**Option B: SSE mode** - Persistent server for stateful connections
+### 2. Start MCP Server
+
+**Option A: Quick start script**
 ```bash
-source /opt/ros/humble/setup.bash
-python src/vision_mcp_server.py --transport sse --port 8000
+./scripts/start-server.sh sse 8000
 ```
 
-> **Why SSE mode?** Stdio mode spawns a new process for each request, losing connection state. SSE mode keeps the server running, maintaining ROS2 connections and camera state between calls.
+**Option B: Systemd service**
+```bash
+sudo ./scripts/install-systemd.sh $USER
+sudo systemctl start rosclaw-vision@$USER
+```
 
-### 3. Test with MCP Inspector
+**Option C: Manual**
+```bash
+source /opt/ros/humble/setup.bash
+python3 src/vision_mcp_enhanced.py --transport sse --port 8000
+```
+
+### 3. Run Demos
 
 ```bash
-# Stdio mode
-mcp dev src/vision_mcp_server.py
+# Run all demos
+python3 demos/demo_all.py
 
-# Or test SSE mode
-curl http://localhost:8000/sse
+# Or test individual features
+mcporter call rosclaw-vision.discover_cameras
+mcporter call rosclaw-vision.connect_multi_camera
+mcporter call rosclaw-vision.detect_objects camera_id=camera confidence=0.5
+```
+
+## Installation
+
+### Prerequisites
+
+- Ubuntu 22.04+
+- ROS2 Humble or Jazzy
+- Python 3.10+
+- Intel RealSense SDK 2.0
+
+### Install Dependencies
+
+```bash
+# Clone repository
+git clone https://github.com/ros-claw/rosclaw-vision-mcp.git
+cd rosclaw-vision-mcp
+
+# Install Python dependencies
+pip install -e .
+
+# Optional: Install YOLO for object detection
+pip install ultralytics
+
+# Install system service (optional)
+sudo ./scripts/install-systemd.sh $USER
 ```
 
 ### Claude Desktop Configuration
@@ -164,7 +211,9 @@ export MCP_PORT=8080
 python src/vision_mcp_server.py
 ```
 
-## Available Tools
+## Available Tools (Enhanced Edition)
+
+### Core Tools (vision_mcp_server.py)
 
 | Tool | Description |
 |------|-------------|
@@ -177,6 +226,43 @@ python src/vision_mcp_server.py
 | `check_workspace_clear` | Check if a 3D volume is obstacle-free |
 | `start_data_recording` | Start rosbag2 recording for data flywheel |
 | `stop_data_recording` | Stop recording and finalize bag file |
+
+### Enhanced Tools (vision_mcp_enhanced.py) ⭐ New!
+
+| Tool | Description |
+|------|-------------|
+| `discover_cameras` | 🔍 Auto-discover all available RealSense cameras |
+| `connect_multi_camera` | 🔗 Connect multiple cameras simultaneously |
+| `capture_from_camera` | 📷 Capture from specific camera by ID |
+| `get_camera_status` | 📊 Get status of all connected cameras |
+| `detect_objects` | 🎯 YOLO object detection with 3D localization |
+| `capture_stereo_image` | 🎬 Capture synchronized stereo pair |
+| `disconnect_all` | 🔌 Disconnect all cameras |
+
+### Tool Usage Examples
+
+**Auto-discover cameras:**
+```bash
+mcporter call rosclaw-vision.discover_cameras
+```
+
+**Connect all detected cameras:**
+```bash
+mcporter call rosclaw-vision.connect_multi_camera
+```
+
+**Detect objects with YOLO:**
+```bash
+mcporter call rosclaw-vision.detect_objects camera_id=camera confidence=0.5
+```
+
+**Capture stereo image:**
+```bash
+mcporter call rosclaw-vision.capture_stereo_image \
+    left_camera=camera \
+    right_camera=camera_2 \
+    quality=85
+```
 
 ## Available Resources
 
@@ -210,17 +296,17 @@ LLM workflow:
 
 `get_object_3d_coordinates()` uses a two-stage strategy:
 
-1. **With YOLO-World** (`pip install ultralytics`): Zero-shot detection — works for any object name without training. Finds bounding box, samples depth at center, back-projects to 3D.
+1. **With YOLO-World** (`pip install ultralytics`): Zero-shot detection - works for any object name without training. Finds bounding box, samples depth at center, back-projects to 3D.
 
 2. **Without YOLO-World**: Returns the captured frame as Base64 for the LLM to visually locate the object, then the user can call `get_depth_at_pixel(u, v)` to get 3D coordinates.
 
 ## Data Flywheel
 
 The `start_data_recording()` tool captures:
-- `/camera/color/image_raw` — RGB video
-- `/camera/aligned_depth_to_color/image_raw` — Depth video
-- `/joint_states` — Robot arm state
-- `/tf` — Transforms
+- `/camera/color/image_raw` - RGB video
+- `/camera/aligned_depth_to_color/image_raw` - Depth video
+- `/joint_states` - Robot arm state
+- `/tf` - Transforms
 
 This data feeds the LeRobot pipeline for VLA model training (π0, OpenVLA).
 
@@ -228,35 +314,35 @@ This data feeds the LeRobot pipeline for VLA model training (π0, OpenVLA).
 
 - Python 3.10+
 - ROS2 Humble or Jazzy
-- `mcp[fastmcp]>=1.0.0` — MCP framework
-- `Pillow>=10.0` — JPEG encoding (replaces heavy cv_bridge dependency)
-- `numpy>=1.24` — Array operations
-- `ultralytics>=8.0` (optional) — YOLO-World object detection
+- `mcp[fastmcp]>=1.0.0` - MCP framework
+- `Pillow>=10.0` - JPEG encoding (replaces heavy cv_bridge dependency)
+- `numpy>=1.24` - Array operations
+- `ultralytics>=8.0` (optional) - YOLO-World object detection
 
 ## Architecture
 
 ```
 vision_mcp_server.py
-├── VisionState      — Frame data (RGB bytes, depth bytes, intrinsics)
-├── StateBuffer      — Thread-safe ring buffer (10 frames)
-├── VisionROS2Bridge — rclpy.Node
-│   ├── _color_callback()  — /camera/color/image_raw subscriber
-│   ├── _depth_callback()  — /camera/aligned_depth_to_color subscriber
-│   ├── _info_callback()   — /camera/color/camera_info subscriber
-│   ├── get_jpeg_base64()  — RGB → JPEG → Base64
-│   ├── get_depth_meters() — Z16 depth lookup
-│   ├── pixel_to_3d()      — Pinhole back-projection
-│   └── check_volume_clear() — Obstacle detection
-└── MCP Tools        — FastMCP @mcp.tool() definitions
+├── VisionState      - Frame data (RGB bytes, depth bytes, intrinsics)
+├── StateBuffer      - Thread-safe ring buffer (10 frames)
+├── VisionROS2Bridge - rclpy.Node
+│   ├── _color_callback()  - /camera/color/image_raw subscriber
+│   ├── _depth_callback()  - /camera/aligned_depth_to_color subscriber
+│   ├── _info_callback()   - /camera/color/camera_info subscriber
+│   ├── get_jpeg_base64()  - RGB → JPEG → Base64
+│   ├── get_depth_meters() - Z16 depth lookup
+│   ├── pixel_to_3d()      - Pinhole back-projection
+│   └── check_volume_clear() - Obstacle detection
+└── MCP Tools        - FastMCP @mcp.tool() definitions
 ```
 
 ## License
 
-MIT License — See [LICENSE](LICENSE)
+MIT License - See [LICENSE](LICENSE)
 
 ## Part of ROSClaw
 
-- [rosclaw-vision-mcp](https://github.com/ros-claw/rosclaw-vision-mcp) — RealSense camera (ROS2)
-- [rosclaw-g1-dds-mcp](https://github.com/ros-claw/rosclaw-g1-dds-mcp) — Unitree G1 (DDS)
-- [rosclaw-ur-ros2-mcp](https://github.com/ros-claw/rosclaw-ur-ros2-mcp) — UR5 arm (ROS2)
-- [rosclaw-gimbal-mcp](https://github.com/ros-claw/rosclaw-gimbal-mcp) — GCU Gimbal (Serial)
+- [rosclaw-vision-mcp](https://github.com/ros-claw/rosclaw-vision-mcp) - RealSense camera (ROS2)
+- [rosclaw-g1-dds-mcp](https://github.com/ros-claw/rosclaw-g1-dds-mcp) - Unitree G1 (DDS)
+- [rosclaw-ur-ros2-mcp](https://github.com/ros-claw/rosclaw-ur-ros2-mcp) - UR5 arm (ROS2)
+- [rosclaw-gimbal-mcp](https://github.com/ros-claw/rosclaw-gimbal-mcp) - GCU Gimbal (Serial)

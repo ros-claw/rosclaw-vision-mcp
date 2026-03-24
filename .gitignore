@@ -48,3 +48,5 @@ log/
 
 # Claude
 .claude/
+scripts/*token*
+scripts/*push*
